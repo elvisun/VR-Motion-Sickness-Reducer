@@ -388,7 +388,7 @@ namespace UnityStandardAssets.Characters.FirstPerson
             m_Camera.transform.localPosition = newCameraPosition;
         }
 
-
+asdfasfdjkadsflkj
         private void GetInput(out float speed)
         {
             // Read input
