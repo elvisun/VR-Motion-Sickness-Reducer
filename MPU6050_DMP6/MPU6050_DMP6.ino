@@ -176,7 +176,7 @@ void setup() {
 // ================================================================
 // ===                    MAIN PROGRAM LOOP                     ===
 // ================================================================
-
+//
 void loop() {
     // if programming failed, don't try to do anything
     if (!dmpReady) return;
