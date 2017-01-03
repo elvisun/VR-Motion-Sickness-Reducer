@@ -48,6 +48,7 @@ namespace UnityStandardAssets.Characters.FirstPerson
         private bool m_Jumping;
         private AudioSource m_AudioSource;
 		private float roll1, pitch1, yaw1, ax1, ay1, az1, roll2, pitch2, yaw2, ax2, ay2, az2;	// to be imported from reader
+		private float roll1Offset, pitch1Offset, yaw1Offset, ax1Offset, ay1Offset, az1Offset, roll2Offset, pitch2Offset, yaw2Offset, ax2Offset, ay2Offset, az2Offset;
 		private Queue roll1Q = new Queue();
 		private Queue pitch1Q = new Queue();
 		private Queue yaw1Q = new Queue();
@@ -63,6 +64,7 @@ namespace UnityStandardAssets.Characters.FirstPerson
 		private int counter;
 		private int averagingSize;
 
+		private float waitTime;
 
         // Use this for initialization
 		private GameObject g;
@@ -99,6 +101,8 @@ namespace UnityStandardAssets.Characters.FirstPerson
 			ax2= 0;
 			ay2= 0;
 			az2 = 0;
+
+			waitTime = 20.0f;
 
         }
 
@@ -228,6 +232,19 @@ namespace UnityStandardAssets.Characters.FirstPerson
 				}
 				az2 = az2 / averagingSize;
 
+				roll1= 0;
+				pitch1= 0;
+				yaw1= 0;
+				ax1= 0;
+				ay1= 0;
+				az1= 0;
+				roll2= 0;
+				pitch2= 0;
+				yaw2= 0;
+				ax2= 0;
+				ay2= 0;
+				az2 = 0;
+
 			}
 			else {										//applying moving averaging filter
 				roll1Q.Enqueue ((float)dataReader.roll1);
@@ -273,52 +290,58 @@ namespace UnityStandardAssets.Characters.FirstPerson
 		}
 
         private void FixedUpdate()
-        {
-			readAndHandleInput ();
+        {	
+			waitTime -= Time.deltaTime;
+			print (waitTime);
+			if (waitTime < 0) {
 
-//			print (yaw1.ToString ("R") + " " + pitch1.ToString ("R") + " " +roll1.ToString ("R") + " " +ax1.ToString ("R") +" " +ay1.ToString ("R") + " " +az1.ToString ("R"));
-//			print (yaw2.ToString ("R") + " " +pitch2.ToString ("R") + " " +roll2.ToString ("R") + " " +ax2.ToString ("R") + " " +ay2.ToString ("R") + " " +az2.ToString ("R"));
-//			print ("=========");
-            float speed;
-            GetInput(out speed);
-            // always move along the camera forward as it is the direction that it being aimed at
-            Vector3 desiredMove = transform.forward*m_Input.y + transform.right*m_Input.x;
+				readAndHandleInput ();
 
-            // get a normal for the surface that is being touched to move along it
-            // RaycastHit hitInfo;
-            // Physics.SphereCast(transform.position, m_CharacterController.radius, Vector3.down, out hitInfo,
-            //                    m_CharacterController.height/2f, ~0, QueryTriggerInteraction.Ignore);
-            // desiredMove = Vector3.ProjectOnPlane(desiredMove, hitInfo.normal).normalized;
+				//			print (yaw1.ToString ("R") + " " + pitch1.ToString ("R") + " " +roll1.ToString ("R") + " " +ax1.ToString ("R") +" " +ay1.ToString ("R") + " " +az1.ToString ("R"));
+				//			print (yaw2.ToString ("R") + " " +pitch2.ToString ("R") + " " +roll2.ToString ("R") + " " +ax2.ToString ("R") + " " +ay2.ToString ("R") + " " +az2.ToString ("R"));
+				//			print ("=========");
+				float speed;
+				GetInput(out speed);
+				// always move along the camera forward as it is the direction that it being aimed at
+				Vector3 desiredMove = transform.forward*m_Input.y + transform.right*m_Input.x;
 
-			float scale = 0.005f;
-			print (yaw1.ToString ("R") + " " + pitch1.ToString ("R") + " " + roll1.ToString ("R"));
-			m_MoveDir.x = roll1 * scale;
-			//m_MoveDir.y = pitch1 * scale;
-			m_MoveDir.z = pitch1 * scale;
+				// get a normal for the surface that is being touched to move along it
+				// RaycastHit hitInfo;
+				// Physics.SphereCast(transform.position, m_CharacterController.radius, Vector3.down, out hitInfo,
+				//                    m_CharacterController.height/2f, ~0, QueryTriggerInteraction.Ignore);
+				// desiredMove = Vector3.ProjectOnPlane(desiredMove, hitInfo.normal).normalized;
+
+				float scale = 0.0005f;
+				print (ax1.ToString ("R") + " " + ay1.ToString ("R") + " " + az1.ToString ("R"));
+				m_MoveDir.x = ax1 * scale;
+				m_MoveDir.y = ay1 * scale;
+				m_MoveDir.z = az1 * scale;
 
 
-            // if (m_CharacterController.isGrounded)
-            // {
-            //     m_MoveDir.y = -m_StickToGroundForce;
+				// if (m_CharacterController.isGrounded)
+				// {
+				//     m_MoveDir.y = -m_StickToGroundForce;
 
-            //     if (m_Jump)
-            //     {
-            //         m_MoveDir.y = m_JumpSpeed;
-            //         PlayJumpSound();
-            //         m_Jump = false;
-            //         m_Jumping = true;
-            //     }
-            // }
-            // else
-            // {
-            //     m_MoveDir += Physics.gravity*m_GravityMultiplier*Time.fixedDeltaTime;
-            // }
-            m_CollisionFlags = m_CharacterController.Move(m_MoveDir*Time.fixedDeltaTime);
+				//     if (m_Jump)
+				//     {
+				//         m_MoveDir.y = m_JumpSpeed;
+				//         PlayJumpSound();
+				//         m_Jump = false;
+				//         m_Jumping = true;
+				//     }
+				// }
+				// else
+				// {
+				//     m_MoveDir += Physics.gravity*m_GravityMultiplier*Time.fixedDeltaTime;
+				// }
+				m_CollisionFlags = m_CharacterController.Move(m_MoveDir*Time.fixedDeltaTime);
 
-            ProgressStepCycle(speed);
-            UpdateCameraPosition(speed);
+				ProgressStepCycle(speed);
+				UpdateCameraPosition(speed);
 
-            m_MouseLook.UpdateCursorLock();
+				m_MouseLook.UpdateCursorLock();
+			}
+
         }
 
 
