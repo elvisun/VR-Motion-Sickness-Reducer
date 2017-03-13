@@ -47,22 +47,16 @@ namespace UnityStandardAssets.Characters.FirstPerson
         private float m_NextStep;
         private bool m_Jumping;
         private AudioSource m_AudioSource;
-		private float roll1, pitch1, yaw1, ax1, ay1, az1, roll2, pitch2, yaw2, ax2, ay2, az2;	// to be imported from reader
-		private float roll1Offset, pitch1Offset, yaw1Offset, ax1Offset, ay1Offset, az1Offset, roll2Offset, pitch2Offset, yaw2Offset, ax2Offset, ay2Offset, az2Offset;
-		private Queue roll1Q = new Queue();
-		private Queue pitch1Q = new Queue();
-		private Queue yaw1Q = new Queue();
-		private Queue ax1Q = new Queue();
-		private Queue ay1Q = new Queue();
-		private Queue az1Q = new Queue();
-		private Queue roll2Q = new Queue();
-		private Queue pitch2Q = new Queue();
-		private Queue yaw2Q = new Queue();
-		private Queue ax2Q = new Queue();
-		private Queue ay2Q = new Queue();
-		private Queue az2Q = new Queue();
+		private int numberOfSensors;
+		private int sensorDOF; 
+
+		private Queue[] dataStream; 					//holds all the data as a queue
+		private float[] averagedData = new float[12]; 	//averagedData
+		private float[] offsets = new float[12]; 		//offsets for all data
 		private int counter;
 		private int averagingSize;
+
+
 
 		private float waitTime;
 
@@ -70,9 +64,23 @@ namespace UnityStandardAssets.Characters.FirstPerson
 		private GameObject g;
 		private Reader dataReader;
 
+		T[] InitializeArray<T>(int length) where T : new()
+		{
+			T[] array = new T[length];
+			for (int i = 0; i < length; ++i)
+			{
+				array[i] = new T();
+			}
 
+			return array;
+		}
+
+
+
+		 
         private void Start()
         {
+
             m_CharacterController = GetComponent<CharacterController>();
             m_Camera = Camera.main;
             m_OriginalCameraPosition = m_Camera.transform.localPosition;
@@ -88,22 +96,10 @@ namespace UnityStandardAssets.Characters.FirstPerson
 			dataReader = (Reader) g.GetComponent(typeof (Reader));
 			counter = 0;
 			averagingSize = 10;
-
-			roll1= 0;
-			pitch1= 0;
-			yaw1= 0;
-			ax1= 0;
-			ay1= 0;
-			az1= 0;
-			roll2= 0;
-			pitch2= 0;
-			yaw2= 0;
-			ax2= 0;
-			ay2= 0;
-			az2 = 0;
-
 			waitTime = 20.0f;
-
+			numberOfSensors = 2;
+			sensorDOF = 6;
+			Queue[] dataStream = InitializeArray<Queue>(numberOfSensors * sensorDOF);
         }
 
 
@@ -142,150 +138,44 @@ namespace UnityStandardAssets.Characters.FirstPerson
         }
 
 		private void readAndHandleInput(){
+			// if less than averaging size, just enqueue
 			if (counter < averagingSize - 1) {
-				roll1Q.Enqueue (dataReader.roll1);
-				pitch1Q.Enqueue (dataReader.pitch1);
-				yaw1Q.Enqueue (dataReader.yaw1);
-				ax1Q.Enqueue (dataReader.ax1);
-				ay1Q.Enqueue (dataReader.ay1);
-				az1Q.Enqueue (dataReader.az1);
-				roll2Q.Enqueue (dataReader.roll2);
-				pitch2Q.Enqueue (dataReader.pitch2);
-				yaw2Q.Enqueue (dataReader.yaw2);
-				ax2Q.Enqueue (dataReader.ax2);
-				ay2Q.Enqueue (dataReader.ay2);
-				az2Q.Enqueue (dataReader.az2);
+				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
+					dataStream [i].Enqueue (dataReader.dataPoints [i]);
+				}
 				counter++;
 			}
-			else if( counter < averagingSize){
-				roll1Q.Enqueue (dataReader.roll1);
-				pitch1Q.Enqueue (dataReader.pitch1);
-				yaw1Q.Enqueue (dataReader.yaw1);
-				ax1Q.Enqueue (dataReader.ax1);
-				ay1Q.Enqueue (dataReader.ay1);
-				az1Q.Enqueue (dataReader.az1);
-				roll2Q.Enqueue (dataReader.roll2);
-				pitch2Q.Enqueue (dataReader.pitch2);
-				yaw2Q.Enqueue (dataReader.yaw2);
-				ax2Q.Enqueue (dataReader.ax2);
-				ay2Q.Enqueue (dataReader.ay2);
-				az2Q.Enqueue (dataReader.az2);
+
+			else if( counter < averagingSize){	//when the size of Q is the averaging size
+				// put in last data set
+				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
+					dataStream [i].Enqueue (dataReader.dataPoints [i]);
+				}
 				counter++;
 
-				foreach (float num in roll1Q.ToArray()) {
-					roll1 = roll1 + num;
+				// add all data and divide by size
+				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
+					foreach (float num in dataStream[i].ToArray()) {
+						averagedData[i] = averagedData[i] + num;
+					}
+					averagedData[i] = averagedData[i] / averagingSize;
 				}
-				roll1 = roll1 / averagingSize;
 
-				foreach (float num in pitch1Q.ToArray()) {
-					pitch1 = pitch1 + num;
+				//set the offset as the newly obtained value
+
+				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
+					offsets [i] = averagedData [i];
+					averagedData [i] = 0f;										// set it to 0 accounting for the offset
 				}
-				pitch1 = pitch1 / averagingSize;
-
-				foreach (float num in yaw1Q.ToArray()) {
-					yaw1 = yaw1 + num;
-				}
-				yaw1 = yaw1 / averagingSize;
-
-				foreach (float num in ax1Q.ToArray()) {
-					ax1 = ax1 + num;
-				}
-				ax1 = ax1 / averagingSize;
-
-				foreach (float num in ay1Q.ToArray()) {
-					ay1 = ay1 + num;
-				}
-				ay1 = ay1 / averagingSize;
-
-				foreach (float num in az1Q.ToArray()) {
-					az1 = az1 + num;
-				}
-				az1 = az1 / averagingSize;
-
-				foreach (float num in roll2Q.ToArray()) {
-					roll2 = roll2 + num;
-				}
-				roll2 = roll2 / averagingSize;
-
-				foreach (float num in pitch2Q.ToArray()) {
-					pitch2 = pitch2 + num;
-				}
-				pitch2 = pitch2 / averagingSize;
-
-				foreach (float num in yaw2Q.ToArray()) {
-					yaw2 = yaw2 + num;
-				}
-				yaw2 = yaw2 / averagingSize;
-
-				foreach (float num in ax2Q.ToArray()) {
-					ax2 = ax2 + num;
-				}
-				ax2 = ax2 / averagingSize;
-
-				foreach (float num in ay2Q.ToArray()) {
-					ay2 = ay2 + num;
-				}
-				ay2 = ay2 / averagingSize;
-
-				foreach (float num in az2Q.ToArray()) {
-					az2 = az2 + num;
-				}
-				az2 = az2 / averagingSize;
-
-				roll1= 0;
-				pitch1= 0;
-				yaw1= 0;
-				ax1= 0;
-				ay1= 0;
-				az1= 0;
-				roll2= 0;
-				pitch2= 0;
-				yaw2= 0;
-				ax2= 0;
-				ay2= 0;
-				az2 = 0;
 
 			}
-			else {										//applying moving averaging filter
-				roll1Q.Enqueue ((float)dataReader.roll1);
-				pitch1Q.Enqueue ((float)dataReader.pitch1);
-				yaw1Q.Enqueue ((float)dataReader.yaw1);
-				ax1Q.Enqueue ((float)dataReader.ax1);
-				ay1Q.Enqueue ((float)dataReader.ay1);
-				az1Q.Enqueue ((float)dataReader.az1);
-				roll2Q.Enqueue ((float)dataReader.roll2);
-				pitch2Q.Enqueue ((float)dataReader.pitch2);
-				yaw2Q.Enqueue ((float)dataReader.yaw2);
-				ax2Q.Enqueue ((float)dataReader.ax2);
-				ay2Q.Enqueue ((float)dataReader.ay2);
-				az2Q.Enqueue ((float)dataReader.az2);
-
-
-				roll1 += (dataReader.roll1);
-				pitch1 += (dataReader.pitch1);
-				yaw1 += (dataReader.yaw1);
-				ax1 += (dataReader.ax1);
-				ay1 += (dataReader.ay1);
-				az1 += (dataReader.az1);
-				roll2 += (dataReader.roll2);
-				pitch2 += (dataReader.pitch2);
-				yaw2 += (dataReader.yaw2);
-				ax2 += (dataReader.ax2);
-				ay2 += (dataReader.ay2);
-				az2 += (dataReader.az2);
-
-				roll1 -= (float) roll1Q.Dequeue();
-				pitch1 -= (float)pitch1Q.Dequeue();
-				yaw1 -= (float)yaw1Q.Dequeue();
-				ax1 -= (float)ax1Q.Dequeue();
-				ay1 -= (float)ay1Q.Dequeue();
-				az1 -= (float)az1Q.Dequeue();
-				roll2 -= (float)roll2Q.Dequeue();
-				pitch2 -= (float)pitch2Q.Dequeue();
-				yaw2 -= (float)yaw2Q.Dequeue();
-				ax2 -= (float)ax2Q.Dequeue();
-				ay2 -= (float)ay2Q.Dequeue();
-				az2 -= (float)az2Q.Dequeue();
+			// calculate new average
+			else {									
+				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
+					dataStream [i].Enqueue (dataReader.dataPoints [i]);
+					averagedData [i] += dataReader.dataPoints [i] / averagingSize; 
+					averagedData [i] -= (float)dataStream [i].Dequeue () / averagingSize;
+				}
 			}
 		}
 
@@ -312,10 +202,9 @@ namespace UnityStandardAssets.Characters.FirstPerson
 				// desiredMove = Vector3.ProjectOnPlane(desiredMove, hitInfo.normal).normalized;
 
 				float scale = 0.0005f;
-				print (ax1.ToString ("R") + " " + ay1.ToString ("R") + " " + az1.ToString ("R"));
-				m_MoveDir.x = ax1 * scale;
-				m_MoveDir.y = ay1 * scale;
-				m_MoveDir.z = az1 * scale;
+				m_MoveDir.x = averagedData[0] * scale;
+				m_MoveDir.y = averagedData[1] * scale;
+				m_MoveDir.z = averagedData[2] * scale;
 
 
 				// if (m_CharacterController.isGrounded)

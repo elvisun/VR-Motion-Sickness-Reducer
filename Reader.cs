@@ -14,7 +14,7 @@ public class Reader : MonoBehaviour {
 
     private SerialPort stream;
 
-	public float roll1, pitch1, yaw1, ax1, ay1, az1, roll2, pitch2, yaw2, ax2, ay2, az2;
+	public float[] dataPoints = new float[12];
 
     // Use this for initialization
     void Start () {
@@ -30,70 +30,21 @@ public class Reader : MonoBehaviour {
 			
 			float q = 0f;
             string [] data = ReadFromArduino().Split();
-			if (float.TryParse (data [1], out q)) {
-				yaw1 = float.Parse (data [1]);
-			} else {
-				yaw1 = 0f;
-			}
-			//print (yaw1);
-			if (float.TryParse (data [2], out q)) {
-				pitch1 = float.Parse (data [2]);
-			} else {
-				pitch1 = 0f;
-			}
-			if (float.TryParse (data [3], out q)) {
-				roll1 = float.Parse (data [3]);
-			} else {
-				roll1 = 0f;
-			}
-			if (float.TryParse (data [5], out q)) {
-				ax1 = float.Parse (data [5]);
-			} else {
-				ax1 = 0f;
-			}
-			if (float.TryParse (data [6], out q)) {
-				ay1 = float.Parse (data [6]);
-			} else {
-				ay1 = 0f;
-			}
-			if (float.TryParse (data [7], out q)) {
-				az1 = float.Parse (data [7]);
-			} else {
-				az1 = 0f;
-			}
 
+			for (int i = 1; i < 13; i++) {
+				
+				// data are stored in slots 123 567 91011 131415
+				int j = 0;
+				j = (i - 1) / 3 + i;
 
-
-			if (float.TryParse (data [9], out q)) {
-				yaw2 = float.Parse (data [9]);
-			} else {
-				yaw2 = 0f;
+				// convert string to float
+				if (float.TryParse (data [j], out q)) {
+					dataPoints[i-1] = float.Parse (data [j]);
+				} else {
+					dataPoints[i-1] = 0f;
+				}
 			}
-			if (float.TryParse (data [10], out q)) {
-				pitch2 = float.Parse (data [10]);
-			} else {
-				pitch2 = 0f;
-			}
-			if (float.TryParse (data [11], out q)) {
-				roll2 = float.Parse (data [11]);
-			} else {
-				roll2 = 0f;
-			}
-			if (float.TryParse (data [13], out q)) {
-				ax2 = float.Parse (data [13]);
-			} else {
-				ax2 = 0f;
-			}
-			if (float.TryParse (data [14], out q)) {
-				ay2 = float.Parse (data [14]);
-			} else {
-				ay2 = 0f;
-			}
-			if (float.TryParse (data [15], out q)) {
-				az2 = float.Parse (data [15]);
-			} else {
-				az2 = 0f;
-			}
+//			
         }
     }
 
