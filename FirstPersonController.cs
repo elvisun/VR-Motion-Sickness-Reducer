@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityStandardAssets.CrossPlatformInput;
 using UnityStandardAssets.Utility;
@@ -50,13 +51,13 @@ namespace UnityStandardAssets.Characters.FirstPerson
 		private int numberOfSensors;
 		private int sensorDOF; 
 
-		private Queue[] dataStream; 					//holds all the data as a queue
-		private float[] averagedData = new float[12]; 	//averagedData
-		private float[] offsets = new float[12]; 		//offsets for all data
-		private int counter;
-		private int averagingSize;
-
-
+		private bool[] convergingTest = new bool[3];	// test to see if the values have stopped changing
+		private float convergingThreshhold;				// a value that determines what the allowable error range is
+		private float[] currentData = new float[12];	// current value
+		private float[] previousData = new float[12]; 	// previous value
+		private float[] diffArray = new float[12];		// store difference between current and previous data
+		private float[] offsets = new float[12]; 		// offsets for all data
+		private bool waitForStablization;		// wait until data is stablized
 
 		private float waitTime;
 
@@ -64,18 +65,17 @@ namespace UnityStandardAssets.Characters.FirstPerson
 		private GameObject g;
 		private Reader dataReader;
 
-		T[] InitializeArray<T>(int length) where T : new()
-		{
-			T[] array = new T[length];
-			for (int i = 0; i < length; ++i)
-			{
-				array[i] = new T();
-			}
+//		T[] InitializeArray<T>(int length) where T : new()
+//		{
+//			T[] array = new T[length];
+//			for (int i = 0; i < length; ++i)
+//			{
+//				array[i] = new T();
+//			}
+//			return array;
+//		}
 
-			return array;
-		}
-
-
+		private Queue<float>[] dataStream = new Queue<float>[12]; 					//holds all the data as a queue
 
 		 
         private void Start()
@@ -94,12 +94,21 @@ namespace UnityStandardAssets.Characters.FirstPerson
 
 			g = GameObject.Find("Reader");
 			dataReader = (Reader) g.GetComponent(typeof (Reader));
-			counter = 0;
-			averagingSize = 10;
-			waitTime = 20.0f;
+			waitTime = 3.0f;			// the reason why we wait is that sensor wait for couple seconds before sending data
 			numberOfSensors = 2;
 			sensorDOF = 6;
-			Queue[] dataStream = InitializeArray<Queue>(numberOfSensors * sensorDOF);
+			convergingThreshhold = 0.0001f;
+			waitForStablization = true;
+
+			for (int i = 0; i < 3; i++) {
+				convergingTest [i] = false;
+			}
+			// initialize all elements of that array to construct queues
+			for (int i = 0; i < 12; i++) {
+				dataStream [i] = new Queue<float> ();
+				currentData [i] = 0f;
+				previousData [i] = 0f;
+			}
         }
 
 
@@ -138,43 +147,32 @@ namespace UnityStandardAssets.Characters.FirstPerson
         }
 
 		private void readAndHandleInput(){
-			// if less than averaging size, just enqueue
-			if (counter < averagingSize - 1) {
-				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
-					dataStream [i].Enqueue (dataReader.dataPoints [i]);
+			if (waitForStablization) {
+				for (int i = 0; i < 12; i++) {
+					previousData [i] = currentData [i];
+					currentData [i] = dataReader.dataPoints [i]; 
+					diffArray [i] = Math.Abs ((currentData [i] - previousData [i]) / currentData [i]);
 				}
-				counter++;
-			}
-
-			else if( counter < averagingSize){	//when the size of Q is the averaging size
-				// put in last data set
-				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
-					dataStream [i].Enqueue (dataReader.dataPoints [i]);
+				convergingTest [0] = convergingTest [1];
+				convergingTest [1] = convergingTest [2]; 
+				if ((diffArray [0] < convergingThreshhold) && (diffArray [1] < convergingThreshhold) && (diffArray [2] < convergingThreshhold)) {
+					convergingTest [2] = true;	
+				} else {
+					convergingTest [2] = false;
 				}
-				counter++;
-
-				// add all data and divide by size
-				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
-					foreach (float num in dataStream[i].ToArray()) {
-						averagedData[i] = averagedData[i] + num;
+				//print (diffArray [0].ToString () + "  " + diffArray [1].ToString () + "  " + diffArray [2].ToString ());
+				//print (convergingTest [0].ToString () + "  " + convergingTest [1].ToString () + "  " + convergingTest [2].ToString ());
+				if (convergingTest [0] && convergingTest [1] && convergingTest [2]) {
+					print ("Data has been stablized");
+					waitForStablization = false;
+					for (int i = 0; i < 12; i++) {
+						offsets [i] = currentData [i];
 					}
-					averagedData[i] = averagedData[i] / averagingSize;
 				}
-
-				//set the offset as the newly obtained value
-
-				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
-					offsets [i] = averagedData [i];
-					averagedData [i] = 0f;										// set it to 0 accounting for the offset
-				}
-
-			}
-			// calculate new average
-			else {									
-				for (int i = 0; i < numberOfSensors * sensorDOF; i++) {
-					dataStream [i].Enqueue (dataReader.dataPoints [i]);
-					averagedData [i] += dataReader.dataPoints [i] / averagingSize; 
-					averagedData [i] -= (float)dataStream [i].Dequeue () / averagingSize;
+			} else {
+				// stablized already
+				for (int i = 0; i < 12; i++) {
+					currentData [i] = dataReader.dataPoints [i] - offsets[i];
 				}
 			}
 		}
@@ -182,55 +180,60 @@ namespace UnityStandardAssets.Characters.FirstPerson
         private void FixedUpdate()
         {	
 			waitTime -= Time.deltaTime;
-			print (waitTime);
 			if (waitTime < 0) {
-
+				
 				readAndHandleInput ();
+				if (!waitForStablization) {
 
-				//			print (yaw1.ToString ("R") + " " + pitch1.ToString ("R") + " " +roll1.ToString ("R") + " " +ax1.ToString ("R") +" " +ay1.ToString ("R") + " " +az1.ToString ("R"));
-				//			print (yaw2.ToString ("R") + " " +pitch2.ToString ("R") + " " +roll2.ToString ("R") + " " +ax2.ToString ("R") + " " +ay2.ToString ("R") + " " +az2.ToString ("R"));
-				//			print ("=========");
-				float speed;
-				GetInput(out speed);
-				// always move along the camera forward as it is the direction that it being aimed at
-				Vector3 desiredMove = transform.forward*m_Input.y + transform.right*m_Input.x;
+					float speed;
+					GetInput (out speed);
+					// always move along the camera forward as it is the direction that it being aimed at
+					Vector3 desiredMove = transform.forward * m_Input.y + transform.right * m_Input.x;
 
-				// get a normal for the surface that is being touched to move along it
-				// RaycastHit hitInfo;
-				// Physics.SphereCast(transform.position, m_CharacterController.radius, Vector3.down, out hitInfo,
-				//                    m_CharacterController.height/2f, ~0, QueryTriggerInteraction.Ignore);
-				// desiredMove = Vector3.ProjectOnPlane(desiredMove, hitInfo.normal).normalized;
+					float scale = 0.001f;
+					if (currentData [0] != 0) {
+						print ("connection established");
+					} else {
+						print ("opps, something went wrong...");
+					}
+					//print (averagedData [3].ToString ("0.00") +"  " + averagedData [5].ToString ("0.00") + "  " + averagedData [4].ToString ("0.00"));
+					print (currentData [3].ToString ("0.00") + "  " + currentData [5].ToString ("0.00") + "  " + currentData [4].ToString ("0.00"));
 
-				float scale = 0.0005f;
-				m_MoveDir.x = averagedData[0] * scale;
-				m_MoveDir.y = averagedData[1] * scale;
-				m_MoveDir.z = averagedData[2] * scale;
+					m_MoveDir.x = currentData [3] * scale;				// left and right
+					m_MoveDir.z = currentData [4] * scale;				// front and back, which is y in arduino
+					m_MoveDir.y = currentData [5] * scale;				// up and down, which is y in unity
 
 
-				// if (m_CharacterController.isGrounded)
-				// {
-				//     m_MoveDir.y = -m_StickToGroundForce;
+					// if (m_CharacterController.isGrounded)
+					// {
+					//     m_MoveDir.y = -m_StickToGroundForce;
 
-				//     if (m_Jump)
-				//     {
-				//         m_MoveDir.y = m_JumpSpeed;
-				//         PlayJumpSound();
-				//         m_Jump = false;
-				//         m_Jumping = true;
-				//     }
-				// }
-				// else
-				// {
-				//     m_MoveDir += Physics.gravity*m_GravityMultiplier*Time.fixedDeltaTime;
-				// }
-				m_CollisionFlags = m_CharacterController.Move(m_MoveDir*Time.fixedDeltaTime);
+					//     if (m_Jump)
+					//     {
+					//         m_MoveDir.y = m_JumpSpeed;
+					//         PlayJumpSound();
+					//         m_Jump = false;
+					//         m_Jumping = true;
+					//     }
+					// }
+					// else
+					// {
+					//     m_MoveDir += Physics.gravity*m_GravityMultiplier*Time.fixedDeltaTime;
+					// }
+					m_CollisionFlags = m_CharacterController.Move (m_MoveDir * Time.fixedDeltaTime);
 
-				ProgressStepCycle(speed);
-				UpdateCameraPosition(speed);
+					ProgressStepCycle (speed);
+					UpdateCameraPosition (speed);
 
-				m_MouseLook.UpdateCursorLock();
+					m_MouseLook.UpdateCursorLock ();
+				} else {
+					print ("waiting for stable input...");
+				}
+			} else { 
+
+				// waiting for sensor to send data
+				print (waitTime);
 			}
-
         }
 
 

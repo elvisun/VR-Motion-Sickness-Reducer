@@ -14,23 +14,25 @@ public class Reader : MonoBehaviour {
 
     private SerialPort stream;
 
-	public float[] dataPoints = new float[12];
+	private float q;
 
+	public float[] dataPoints = new float[12];
     // Use this for initialization
     void Start () {
-        Open();
+		q = 0f; 
+
+		Open();
     }
     
     // Update is called once per frame
     void Update () {
         if (ReadFromArduino() == null) {
             WriteToArduino("0");
+			print ("writing to arduino");
         }
         else{
 			
-			float q = 0f;
             string [] data = ReadFromArduino().Split();
-
 			for (int i = 1; i < 13; i++) {
 				
 				// data are stored in slots 123 567 91011 131415
@@ -39,12 +41,12 @@ public class Reader : MonoBehaviour {
 
 				// convert string to float
 				if (float.TryParse (data [j], out q)) {
-					dataPoints[i-1] = float.Parse (data [j]);
+					dataPoints [i - 1] = float.Parse (data [j]);
 				} else {
-					dataPoints[i-1] = 0f;
+					dataPoints [i - 1] = 0f;
 				}
 			}
-//			
+
         }
     }
 
