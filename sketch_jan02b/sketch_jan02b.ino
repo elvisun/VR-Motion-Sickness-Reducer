@@ -1,4 +1,3 @@
-
 #include "I2Cdev.h"
 
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -16,6 +15,7 @@
 // AD0 high = 0x69
 MPU6050 mpu(0x68);
 MPU6050 mpu1(0x69);
+
 
 #define OUTPUT_READABLE_YAWPITCHROLL
 
@@ -127,8 +127,10 @@ void setup() {
     mpu.setXGyroOffset(220);
     mpu.setYGyroOffset(76);
     mpu.setZGyroOffset(-85);
-    mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
-
+    mpu.setZAccelOffset(5230); // 1688 factory default for my test chip
+    mpu.setXAccelOffset(-5700);
+    mpu.setYAccelOffset(32768);
+    
     mpu1.setXGyroOffset(220);
     mpu1.setYGyroOffset(76);
     mpu1.setZGyroOffset(-85);
@@ -287,3 +289,4 @@ void loop() {
         digitalWrite(LED_PIN, blinkState);
     }
 }
+

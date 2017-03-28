@@ -53,34 +53,27 @@ namespace UnityStandardAssets.Characters.FirstPerson
 
 		private bool[] convergingTest = new bool[3];	// test to see if the values have stopped changing
 		private float convergingThreshhold;				// a value that determines what the allowable error range is
-		private float[] currentData = new float[12];	// current value
 		private float[] previousData = new float[12]; 	// previous value
 		private float[] diffArray = new float[12];		// store difference between current and previous data
 		private float[] offsets = new float[12]; 		// offsets for all data
 		private bool waitForStablization;		// wait until data is stablized
 
 		private float waitTime;
-
+		private float ax, ay, az, vx, vy, vz, kvx, kvy, kvz, constantvx, constantvy;		// keeps track of velocity in xyz, and also its coefficients
+		private float initialSpeed, initialAngle, rotationAngle, rotationSensitivity, previousRotation; 
+		private int waitCycles;
         // Use this for initialization
 		private GameObject g;
 		private Reader dataReader;
-
-//		T[] InitializeArray<T>(int length) where T : new()
-//		{
-//			T[] array = new T[length];
-//			for (int i = 0; i < length; ++i)
-//			{
-//				array[i] = new T();
-//			}
-//			return array;
-//		}
 
 		private Queue<float>[] dataStream = new Queue<float>[12]; 					//holds all the data as a queue
 
 		 
         private void Start()
-        {
+        {	
 
+
+			// character controller variables
             m_CharacterController = GetComponent<CharacterController>();
             m_Camera = Camera.main;
             m_OriginalCameraPosition = m_Camera.transform.localPosition;
@@ -92,23 +85,38 @@ namespace UnityStandardAssets.Characters.FirstPerson
             m_AudioSource = GetComponent<AudioSource>();
 			m_MouseLook.Init(transform , m_Camera.transform);
 
+
+			//align view
+			//this.gameObject.transform.rotation = this.gameObject.transform.GetChild (0).gameObject.transform.rotation;
+
+			// logic variables
 			g = GameObject.Find("Reader");
 			dataReader = (Reader) g.GetComponent(typeof (Reader));
 			waitTime = 3.0f;			// the reason why we wait is that sensor wait for couple seconds before sending data
 			numberOfSensors = 2;
 			sensorDOF = 6;
-			convergingThreshhold = 0.0001f;
-			waitForStablization = true;
 
-			for (int i = 0; i < 3; i++) {
-				convergingTest [i] = false;
-			}
-			// initialize all elements of that array to construct queues
-			for (int i = 0; i < 12; i++) {
-				dataStream [i] = new Queue<float> ();
-				currentData [i] = 0f;
-				previousData [i] = 0f;
-			}
+			// computation variables
+			// default velocities
+			vx = 0f;
+			vy = 0f;
+			vz = 0f;
+
+			// scaling coefficients
+			kvx = 0.02f;		// left and right
+			kvy = 0.02f;		// up and down, which is y in unity
+			kvz = 5f;		// front and back, which is y in arduino
+
+			ax = 0f;
+			ay = 0f;
+			az = 0f;
+
+			initialSpeed = 30f;
+
+			initialAngle = 0f;
+			rotationSensitivity = 1.5f;
+
+
         }
 
 
@@ -136,6 +144,13 @@ namespace UnityStandardAssets.Characters.FirstPerson
             }
 
             m_PreviouslyGrounded = m_CharacterController.isGrounded;
+
+			if(Input.GetKeyDown(KeyCode.R)){
+				transform.position = Vector3.zero;
+				vx = 0f;
+				vy = 0f;
+				vz = 0f;
+			}
         }
 
 
@@ -146,93 +161,102 @@ namespace UnityStandardAssets.Characters.FirstPerson
             m_NextStep = m_StepCycle + .5f;
         }
 
-		private void readAndHandleInput(){
-			if (waitForStablization) {
-				for (int i = 0; i < 12; i++) {
-					previousData [i] = currentData [i];
-					currentData [i] = dataReader.dataPoints [i]; 
-					diffArray [i] = Math.Abs ((currentData [i] - previousData [i]) / currentData [i]);
-				}
-				convergingTest [0] = convergingTest [1];
-				convergingTest [1] = convergingTest [2]; 
-				if ((diffArray [0] < convergingThreshhold) && (diffArray [1] < convergingThreshhold) && (diffArray [2] < convergingThreshhold)) {
-					convergingTest [2] = true;	
-				} else {
-					convergingTest [2] = false;
-				}
-				//print (diffArray [0].ToString () + "  " + diffArray [1].ToString () + "  " + diffArray [2].ToString ());
-				//print (convergingTest [0].ToString () + "  " + convergingTest [1].ToString () + "  " + convergingTest [2].ToString ());
-				if (convergingTest [0] && convergingTest [1] && convergingTest [2]) {
-					print ("Data has been stablized");
-					waitForStablization = false;
-					for (int i = 0; i < 12; i++) {
-						offsets [i] = currentData [i];
-					}
-				}
-			} else {
-				// stablized already
-				for (int i = 0; i < 12; i++) {
-					currentData [i] = dataReader.dataPoints [i] - offsets[i];
-				}
-			}
-		}
 
         private void FixedUpdate()
         {	
 			waitTime -= Time.deltaTime;
+
 			if (waitTime < 0) {
 				
-				readAndHandleInput ();
-				if (!waitForStablization) {
+				float speed;
+				float highPassThreashold;
+				GetInput (out speed);
+				// always move along the camera forward as it is the direction that it being aimed at
+				Vector3 desiredMove = transform.forward * m_Input.y + transform.right * m_Input.x;
 
-					float speed;
-					GetInput (out speed);
-					// always move along the camera forward as it is the direction that it being aimed at
-					Vector3 desiredMove = transform.forward * m_Input.y + transform.right * m_Input.x;
-
-					float scale = 0.001f;
-					if (currentData [0] != 0) {
-						print ("connection established");
-					} else {
-						print ("opps, something went wrong...");
-					}
-					//print (averagedData [3].ToString ("0.00") +"  " + averagedData [5].ToString ("0.00") + "  " + averagedData [4].ToString ("0.00"));
-					print (currentData [3].ToString ("0.00") + "  " + currentData [5].ToString ("0.00") + "  " + currentData [4].ToString ("0.00"));
-
-					m_MoveDir.x = currentData [3] * scale;				// left and right
-					m_MoveDir.z = currentData [4] * scale;				// front and back, which is y in arduino
-					m_MoveDir.y = currentData [5] * scale;				// up and down, which is y in unity
-
-
-					// if (m_CharacterController.isGrounded)
-					// {
-					//     m_MoveDir.y = -m_StickToGroundForce;
-
-					//     if (m_Jump)
-					//     {
-					//         m_MoveDir.y = m_JumpSpeed;
-					//         PlayJumpSound();
-					//         m_Jump = false;
-					//         m_Jumping = true;
-					//     }
-					// }
-					// else
-					// {
-					//     m_MoveDir += Physics.gravity*m_GravityMultiplier*Time.fixedDeltaTime;
-					// }
-					m_CollisionFlags = m_CharacterController.Move (m_MoveDir * Time.fixedDeltaTime);
-
-					ProgressStepCycle (speed);
-					UpdateCameraPosition (speed);
-
-					m_MouseLook.UpdateCursorLock ();
+				if (dataReader.currentData [0] != 0) {
+					//print ("connection established");
 				} else {
-					print ("waiting for stable input...");
+					//print ("opps, something went wrong...");
 				}
-			} else { 
 
+				//logging data
+				//print acceleration
+				//print (dataReader.currentData [3].ToString ("0.00") + "  " + dataReader.currentData [5].ToString ("0.00") + "  " + dataReader.currentData [4].ToString ("0.00"));
+
+
+				// compute distance to move
+				previousRotation = rotationAngle;
+				rotationAngle = (dataReader.currentData[0] * rotationSensitivity) / 180f * ((float)Math.PI);			// all Mathf functions take Radian, not degree
+				//print(rotationAngle);
+				if (Math.Abs (rotationAngle - previousRotation) > 0.0174444f * 0.1f) {		// if turning too much
+					ax = 0f;
+					ay = 0f;
+					az = 0f;
+					vz = 0f;
+					waitCycles = 20;
+					//print ("turning");
+				} else {
+					// wait for x cycles until data is stable
+					waitCycles -= 1;
+					if (waitCycles <= 0) {
+						//print ("not turning");
+						ax = Mathf.Cos (rotationAngle) * dataReader.currentData [3] - Mathf.Sin (rotationAngle) * dataReader.currentData [4];
+						ay = Mathf.Sin (rotationAngle) * dataReader.currentData [3] + Mathf.Cos (rotationAngle) * dataReader.currentData [4];
+						az = dataReader.currentData [5];
+
+						print (az.ToString("0.00"));
+						// integrate to get velocity
+						highPassThreashold = 5f;
+						if (Math.Abs (ax) > highPassThreashold) {
+							vx += ax * kvx;
+						} else
+							vx = 0;
+						if (Math.Abs (az) > highPassThreashold) {
+							vz += az * kvz;
+						} else
+							vz = 0;
+						if (Math.Abs (ay) > highPassThreashold) {
+							vy += ay * kvy;
+						} else
+							vy = 0;
+					} else {
+						//print ("waiting");
+					}
+				}
+					
+				// calculate the new forward direction
+				constantvx =  Mathf.Sin (rotationAngle) * initialSpeed; 
+				constantvy =  Mathf.Cos (rotationAngle) * initialSpeed;
+
+
+				//print (dataReader.currentData [4].ToString ("0.00") + "  " + dataReader.currentData [3].ToString ("0.00") + "  " + dataReader.currentData [5].ToString ("0.00"));
+
+				//print (rotationAngle.ToString() + " , " + ax.ToString ("0.00") + "  " + ay.ToString ("0.00") + "  " + az.ToString ("0.00"));
+
+				//print (vx.ToString ("0.00") + "  " + vy.ToString ("0.00") + "  " + vz.ToString ("0.00"));
+
+				//print (vz);
+
+				m_MoveDir.x = constantvx;//+ vx * Time.deltaTime;				// left and right
+				m_MoveDir.z = constantvy;// + vy * Time.deltaTime;				// front and back, which is y in arduino
+				//m_MoveDir.y = vz * Time.deltaTime;				// up and down, which is y in unity
+
+				// 3 is left and right
+				// 4 is front and back
+				// 5 is up and down
+
+
+				m_CollisionFlags = m_CharacterController.Move (m_MoveDir * Time.fixedDeltaTime);
+
+				ProgressStepCycle (speed);
+				UpdateCameraPosition (speed);
+
+				m_MouseLook.UpdateCursorLock ();
+
+			} else { 
 				// waiting for sensor to send data
-				print (waitTime);
+				//print (waitTime);
 			}
         }
 
